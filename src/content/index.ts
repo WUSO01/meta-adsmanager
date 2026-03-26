@@ -307,8 +307,22 @@ function patchByCellSuffix(element: Element, suffix: string, value: unknown) {
   const cell = element.querySelector(`span[data-surface$="${suffix}"]`)
   if (!cell) return
 
+  const suffixs = [
+    'table_cell:forAttributionWindow(results,default)',
+    'table_cell:forAttributionWindow(cost_per_result,default)',
+    'table_cell:forAttributionWindow(cost_per_action_type:omni_complete_registration,default)',
+    'table_cell:forAttributionWindow(actions:omni_complete_registration,default)',
+  ]
+
   const mainEl = cell.querySelector('[geotextcolor="value"]') as HTMLElement | null
   if (mainEl) {
+    if (suffixs.some(item => item === suffix)) {
+      if (value === '—') {
+        mainEl.style.textDecoration = 'none'
+      } else {
+        mainEl.style.textDecoration = 'underline dotted'
+      }
+    }
     mainEl.textContent = toText(value)
     return
   }
