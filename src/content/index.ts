@@ -136,11 +136,12 @@ function applyStatsToPage(basePageStats: PageStats, scrapedRows: RowData[], edit
 
   const patchFooterCell = (surfaceSuffix: string, text: string) => {
     const cell = footer.querySelector(`span[data-surface$="${surfaceSuffix}"]`);
+
     if (!cell) return;
     // 优先找带 geotextcolor 的主值元素，其次找 _3dfi（货币格式），最后找 data-interactable
     const el = (
       cell.querySelector('[geotextcolor="value"]') ??
-      cell.querySelector('._3dfi') ??
+      cell.querySelector('.x1rg5ohu') ??
       cell.querySelector('span[data-interactable]')
     ) as HTMLElement | null;
     if (el) el.textContent = text;
@@ -155,8 +156,6 @@ function applyStatsToPage(basePageStats: PageStats, scrapedRows: RowData[], edit
   patchFooterCell('table_cell:impressions', formatCurrency(finalImpressions, false));
   patchFooterCell('table_cell:forAttributionWindow(results,default)', formatCurrency(finalResults, false));
   patchFooterCell('table_cell:forAttributionWindow(actions:omni_complete_registration,default)', formatCurrency(finalCompleteReg, false));
-  patchFooterCell('table_cell:clicks', formatCurrency(finalClicks, false));
-  patchFooterCell('table_cell:clicks', formatCurrency(finalClicks, false));
   patchFooterCell('table_cell:clicks', formatCurrency(finalClicks, false));
   patchFooterCell('forAttributionWindow(cost_per_result,default)', cost_per_result)
   patchFooterCell('forAttributionWindow(cost_per_action_type:omni_complete_registration,default)', per_complete_registration)

@@ -12,7 +12,8 @@ export const parseCurrency = (value?: string): number => {
 
 
 export const formatCurrency = (value?: number | string, dollar = true): string => {
-  if (value === 0 || value === '0') return '—'
+  if (typeof value === 'string' || !value) return '—'
+  if (value === 0 || !isFinite(value)) return '—'
   let result = Number(value || 0).toLocaleString('en-US', {
     style: dollar ? 'currency' : undefined,
     currency: dollar ? 'USD' : undefined
