@@ -2,13 +2,14 @@ import { EDIT_KEY, SCRAPE_STATS_KEY, SCRAPE_STOREAGE_KEY } from "@/shares/consta
 import type { DateRange, EditItem, Level, Message, PageStats, RowData } from "@/shares/types";
 import type { NestedData } from "@/store/useAppStore";
 import Extract from "@/utils/extract/extract";
-import { hasDataForRange, mergeEdits } from "@/utils/merge";
+import { getMissingDates, hasDataForRange, mergeEdits } from "@/utils/merge";
 import dayjs from "dayjs";
 import { formatCurrency, parseCurrency, processNumber, removeAfterComma, sleep } from "../utils";
 
 let latestEditsCache: EditItem = {}
 let observer: MutationObserver | null = null
 let rafId: number | null = null
+let partialRangeBaseStatsCache: Record<string, PageStats> = {}
 
 
 /**
@@ -39,7 +40,11 @@ function extractPageStats(): PageStats {
   };
 }
 
-function resolveBasePageStats(storedStats: PageStats | undefined, hasScrapedDataForCurrentRange: boolean) {
+function resolveBasePageStats(
+  storedStats: PageStats | undefined,
+  hasScrapedDataForCurrentRange: boolean,
+  partialRangeBaseKey?: string
+) {
   const livePageStats = extractPageStats()
 
   // 当前范围没有抓取数据：直接使用页面原始统计
@@ -47,8 +52,16 @@ function resolveBasePageStats(storedStats: PageStats | undefined, hasScrapedData
     return livePageStats
   }
 
-  // 当前范围已抓取：必须以抓取时快照为基准（即使是 0），
-  // 避免在 observer 多次触发时基于已 patch 结果重复叠加。
+  // 多日范围存在未抓取日期：基准应取页面完整统计（含未抓取日期），
+  // 但要固定为首次读取值，避免 observer 重复触发导致累计叠加。
+  if (partialRangeBaseKey) {
+    if (!partialRangeBaseStatsCache[partialRangeBaseKey]) {
+      partialRangeBaseStatsCache[partialRangeBaseKey] = livePageStats
+    }
+    return partialRangeBaseStatsCache[partialRangeBaseKey]
+  }
+
+  // 当前范围已抓取完整：必须以抓取时快照为基准（即使是 0）
   if (storedStats) {
     return storedStats
   }
@@ -415,6 +428,13 @@ async function applyTodayFromCache() {
     const allData: NestedData = rawData[SCRAPE_STOREAGE_KEY] || {}
     const allPageStats: Record<string, PageStats> = rawData[SCRAPE_STATS_KEY] || {}
     const hasScrapedDataForCurrentRange = hasDataForRange(allData, range)
+    const missingDates = getMissingDates(allData, range)
+    const hasMissingDates = missingDates.length > 0
+
+    // 非“多日且有缺失”场景，清理部分范围基准缓存，避免串用
+    if (!range || range.start === range.end || !hasMissingDates) {
+      partialRangeBaseStatsCache = {}
+    }
 
     // 多日范围
     if (range && range.start !== range.end) {
@@ -439,7 +459,8 @@ async function applyTodayFromCache() {
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
+      const partialRangeBaseKey = hasMissingDates ? `${range.start}__${range.end}__${act}__${currentLevel}` : undefined
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange, partialRangeBaseKey)
       if (!basePageStats) return
 
       rowWrappers.forEach((element) => {
