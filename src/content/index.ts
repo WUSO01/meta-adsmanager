@@ -180,7 +180,7 @@ function applyStatsToPage(basePageStats: PageStats, scrapedRows: RowData[], edit
   };
 
   // 单次成效费用
-  const cost_per_result = formatCurrency(finalAmountSpent / finalImpressions)
+  const cost_per_result = formatCurrency(finalAmountSpent / finalResults)
   // 单次注册费用
   const per_complete_registration = formatCurrency(finalAmountSpent / finalCompleteReg)
 

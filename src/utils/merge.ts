@@ -22,18 +22,25 @@ export function deepMerge(target: any, source: any) {
 }
 
 /** 需要在多日范围内累加（而非覆盖）的数值字段 */
-const ADDITIVE_FIELDS: Array<keyof RowData> = ['impressions', 'amount_spent'];
+const ADDITIVE_FIELDS: Array<keyof RowData> = [
+  'impressions',
+  'amount_spent',
+  'click',
+  'complete_registration',
+];
 
 /**
  * 将 src 中的一条 RowData 累加合并到 target 上。
  * - ADDITIVE_FIELDS 中的字段：数值累加
  * - results.value：累加
- * - cost_per_result：保留最新值（无意义累加）
+ * - cost_per_result / per_complete_registration：保留最新值（无意义累加）
  * - 其余字段：用 src 覆盖（取最新值）
  */
 function accumulateRow(target: RowData, src: RowData): RowData {
-  const merged: any = { ...target };
+  // 先用 src 覆盖基础字段（name/status/budget 等取最新）
+  const merged: any = { ...target, ...src };
 
+  // 指标字段累加
   for (const key of ADDITIVE_FIELDS) {
     const tVal = typeof (target as any)[key] === 'number' ? (target as any)[key] : 0;
     const sVal = typeof (src as any)[key] === 'number' ? (src as any)[key] : 0;
@@ -41,20 +48,17 @@ function accumulateRow(target: RowData, src: RowData): RowData {
   }
 
   // results.value 累加
-  if (src.results != null) {
+  if (src.results != null || target.results != null) {
     merged.results = {
-      ...src.results,
-      value: ((target as any).results?.value ?? 0) + (src.results.value ?? 0),
+      ...(target.results || {}),
+      ...(src.results || {}),
+      value: ((target as any).results?.value ?? 0) + ((src as any).results?.value ?? 0),
     };
-  }
-
-  // cost_per_result 不做累加，保留最新值
-  if (src.cost_per_result != null) {
-    merged.cost_per_result = src.cost_per_result;
   }
 
   return merged as RowData;
 }
+
 
 /**
  * 判断指定时间范围在 data 中是否有对应的抓取数据
