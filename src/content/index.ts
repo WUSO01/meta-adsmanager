@@ -2,7 +2,7 @@ import { EDIT_KEY, SCRAPE_STATS_KEY, SCRAPE_STOREAGE_KEY } from "@/shares/consta
 import type { DateRange, EditItem, Level, Message, PageStats, RowData } from "@/shares/types";
 import type { NestedData } from "@/store/useAppStore";
 import Extract from "@/utils/extract/extract";
-import { mergeEdits } from "@/utils/merge";
+import { hasDataForRange, mergeEdits } from "@/utils/merge";
 import dayjs from "dayjs";
 import { formatCurrency, parseCurrency, processNumber, removeAfterComma, sleep } from "../utils";
 
@@ -38,6 +38,25 @@ function extractPageStats(): PageStats {
     count: 0,
   };
 }
+
+function resolveBasePageStats(storedStats: PageStats | undefined, hasScrapedDataForCurrentRange: boolean) {
+  const livePageStats = extractPageStats()
+
+  // 当前范围没有抓取数据：直接使用页面原始统计
+  if (!hasScrapedDataForCurrentRange) {
+    return livePageStats
+  }
+
+  // 当前范围已抓取：必须以抓取时快照为基准（即使是 0），
+  // 避免在 observer 多次触发时基于已 patch 结果重复叠加。
+  if (storedStats) {
+    return storedStats
+  }
+
+  // 当前范围已抓取但没有对应统计快照时，不回写 footer，避免重复累加
+  return null
+}
+
 
 /**
  * 根据当前时间范围、账户、层级，生成统计快照 storage key
@@ -395,6 +414,7 @@ async function applyTodayFromCache() {
     const rawData = await chrome.storage.local.get([SCRAPE_STOREAGE_KEY, SCRAPE_STATS_KEY])
     const allData: NestedData = rawData[SCRAPE_STOREAGE_KEY] || {}
     const allPageStats: Record<string, PageStats> = rawData[SCRAPE_STATS_KEY] || {}
+    const hasScrapedDataForCurrentRange = hasDataForRange(allData, range)
 
     // 多日范围
     if (range && range.start !== range.end) {
@@ -419,7 +439,7 @@ async function applyTodayFromCache() {
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = allPageStats[storedStatsKey]
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
       if (!basePageStats) return
 
       rowWrappers.forEach((element) => {
@@ -451,7 +471,7 @@ async function applyTodayFromCache() {
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = allPageStats[storedStatsKey]
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
       if (!basePageStats) return
 
       rowWrappers.forEach((element) => {
@@ -483,7 +503,7 @@ async function applyTodayFromCache() {
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = allPageStats[storedStatsKey]
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
       if (!basePageStats) return
 
       rowWrappers.forEach((element) => {
