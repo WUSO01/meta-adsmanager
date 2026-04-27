@@ -342,7 +342,7 @@ function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
 
   // 单次成效费用更新
   if (patch.cost_per_result && typeof patch.cost_per_result === 'object' && 'value' in patch.cost_per_result) {
-    patchByCellSuffix(element, 'table_cell:forAttributionWindow(cost_per_result,default)', formatCurrency(patch.cost_per_result.value))
+    patchByCellSuffix(element, 'table_cell:forAttributionWindow(cost_per_result,default)', formatCurrency(patch.cost_per_result.value, true, true))
   }
 
   // 已花费金额更新

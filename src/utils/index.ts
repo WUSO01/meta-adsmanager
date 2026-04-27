@@ -11,9 +11,20 @@ export const parseCurrency = (value?: string): number => {
 };
 
 
-export const formatCurrency = (value?: number | string, dollar = true): string => {
-  if (typeof value === 'string' || !value) return '—'
-  if (value === 0 || !isFinite(value)) return '—'
+export const formatCurrency = (value?: number | string, dollar = true, isMoney = false): string => {
+  if (typeof value === 'string' || !value) {
+    if (isMoney) {
+      return  '$0.00'
+    }
+    return '—'
+  }
+  
+  if (value === 0 || !isFinite(value)) {
+    if (isMoney) {
+      return  '$0.00'
+    }
+    return '—'
+  }
   let result = Number(value || 0).toLocaleString('en-US', {
     style: dollar ? 'currency' : undefined,
     currency: dollar ? 'USD' : undefined
