@@ -1,6 +1,6 @@
 import { Level } from '@/shares/types'
 import { useAppStore } from '@/store/useAppStore'
-import { Button, message, Popconfirm, Spin } from 'antd'
+import { Button, message, Popconfirm, Spin, Switch } from 'antd'
 import { useMemo, useState } from 'react'
 import { getLevelDataFromRows } from '@/utils'
 
@@ -8,6 +8,8 @@ export default function App() {
   const data = useAppStore(s => s.data)
   const edits = useAppStore(s => s.edits)
   const deleteTimeKey = useAppStore(s => s.deleteTimeKey)
+  const syncEnabled = useAppStore(s => s.syncEnabled)
+  const setSyncEnabled = useAppStore(s => s.setSyncEnabled)
   const [spinning, setSpinning] = useState(false)
 
   const buttons = [
@@ -112,6 +114,19 @@ export default function App() {
           <div className="px-5 pb-4 pt-5">
             <h1 className="text-2xl font-bold text-slate-900">Facebook 广告管理</h1>
             <p className="mt-1 text-sm text-slate-500">自定义你的广告数据</p>
+
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+              <div>
+                <span className="text-sm font-medium text-slate-700">同步到页面</span>
+                <p className="text-xs text-slate-400">{syncEnabled ? '编辑数据将实时同步到广告页面' : '已暂停同步，页面显示原始数据'}</p>
+              </div>
+              <Switch
+                checked={syncEnabled}
+                onChange={setSyncEnabled}
+                checkedChildren="开"
+                unCheckedChildren="关"
+              />
+            </div>
 
             <div className="mt-4 p-[10px] flex justify-around rounded-xl bg-slate-100 p-1">
               {buttons.map(item => (

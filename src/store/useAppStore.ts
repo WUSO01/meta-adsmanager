@@ -3,7 +3,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { storage } from "@/utils/storeage";
 import { DateRange, EditItem, RowData } from "@/shares/types";
-import { SCRAPE_STATS_KEY } from "@/shares/constants";
+import { SCRAPE_STATS_KEY, SYNC_ENABLED_KEY } from "@/shares/constants";
 
 /** 嵌套存储结构：{ [timeKey]: { [adId]: RowData } } */
 export type NestedData = Record<string, Record<string, RowData>>
@@ -14,6 +14,7 @@ interface AppState {
   range?: DateRange
   acts: string[]
   selectedAct?: string
+  syncEnabled: boolean
 
   setData: (data: Record<string, RowData>) => void;
   /**
@@ -27,6 +28,7 @@ interface AppState {
   setRange: (range?: DateRange) => void;
   setActs: (acts: string[]) => void;
   setSelectedAct: (act?: string) => void;
+  setSyncEnabled: (enabled: boolean) => Promise<void>;
   /** 清除全部缓存数据（data） */
   clearCache: () => Promise<void>;
   /** 撤销全部修改（edits） */
@@ -43,6 +45,7 @@ export const useAppStore = create<AppState>()(
       history: [],
       acts: [],
       selectedAct: undefined,
+      syncEnabled: true,
 
       setData: (data) => {
         set((state) => {
@@ -75,6 +78,13 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           state.selectedAct = act
         })
+      },
+
+      setSyncEnabled: async (enabled) => {
+        set((state) => {
+          state.syncEnabled = enabled
+        })
+        await storage.set(SYNC_ENABLED_KEY, enabled)
       },
 
       updateEdit: async (id, date, patch) => {

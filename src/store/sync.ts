@@ -1,10 +1,10 @@
 import { NestedData } from "./useAppStore";
 import { useAppStore } from "./useAppStore";
-import { EDIT_KEY, SCRAPE_STOREAGE_KEY, ACT_KEY } from "@/shares/constants";
+import { EDIT_KEY, SCRAPE_STOREAGE_KEY, ACT_KEY, SYNC_ENABLED_KEY } from "@/shares/constants";
 
 let isHydrating = false; // 防止循环更新
 
-const storageKey = [SCRAPE_STOREAGE_KEY, EDIT_KEY, ACT_KEY]
+const storageKey = [SCRAPE_STOREAGE_KEY, EDIT_KEY, ACT_KEY, SYNC_ENABLED_KEY]
 
 /**
  * 初始化时同步storeage中的数据到store中
@@ -22,6 +22,7 @@ export async function hydrateStore() {
           edits: res.edits || {},
           acts,
           selectedAct: state.selectedAct && acts.includes(state.selectedAct) ? state.selectedAct : undefined,
+          syncEnabled: res[SYNC_ENABLED_KEY] !== false,
         }));
 
         isHydrating = false;
@@ -50,6 +51,12 @@ export function subscribeStorage() {
       });
     }
 
+
+    if (changes[SYNC_ENABLED_KEY]) {
+      useAppStore.setState({
+        syncEnabled: changes[SYNC_ENABLED_KEY].newValue !== false,
+      })
+    }
 
     if (changes[ACT_KEY]) {
       const acts = (changes[ACT_KEY].newValue || []) as string[]

@@ -1,4 +1,4 @@
-import { EDIT_KEY, SCRAPE_STATS_KEY, SCRAPE_STOREAGE_KEY } from "@/shares/constants";
+import { EDIT_KEY, SCRAPE_STATS_KEY, SCRAPE_STOREAGE_KEY, SYNC_ENABLED_KEY } from "@/shares/constants";
 import type { DateRange, EditItem, Level, Message, PageStats, RowData } from "@/shares/types";
 import type { NestedData } from "@/store/useAppStore";
 import Extract from "@/utils/extract/extract";
@@ -10,6 +10,7 @@ let latestEditsCache: EditItem = {}
 let observer: MutationObserver | null = null
 let rafId: number | null = null
 let partialRangeBaseStatsCache: Record<string, PageStats> = {}
+let syncEnabled = true
 
 
 /**
@@ -391,7 +392,9 @@ function waitForRowsAndApply(retries = 20, interval = 300) {
  * 打开页面的时候数据回填
  */
 function syncTodayEditsOnLoad() {
-  chrome.storage.local.get([EDIT_KEY], (res) => {
+  chrome.storage.local.get([EDIT_KEY, SYNC_ENABLED_KEY], (res) => {
+    syncEnabled = res?.[SYNC_ENABLED_KEY] !== false
+    if (!syncEnabled) return
     const edits = (res?.[EDIT_KEY] || {}) as EditItem
     latestEditsCache = edits
     waitForRowsAndApply()
@@ -404,6 +407,20 @@ function syncTodayEditsOnLoad() {
 function subscribeRealtimeEditsSync() {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return
+
+    // 监听同步开关变化
+    if (changes[SYNC_ENABLED_KEY]) {
+      const enabled = changes[SYNC_ENABLED_KEY].newValue !== false
+      syncEnabled = enabled
+      if (!enabled) {
+        window.location.reload()
+        return
+      }
+      applyTodayFromCache()
+      return
+    }
+
+    if (!syncEnabled) return
 
     // 若抓取数据（data）被清空，说明用户执行了「清除缓存」，
     // 此时直接刷新页面，让 Meta 重新渲染原始值
@@ -565,7 +582,7 @@ async function applyTodayFromCache() {
 }
 
 function scheduleApplyToday() {
-  if (rafId !== null) return
+  if (rafId !== null || !syncEnabled) return
 
   rafId = window.requestAnimationFrame(() => {
     rafId = null

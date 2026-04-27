@@ -7,5 +7,8 @@ export const EDIT_KEY = 'edits'
 /** 账户 ID 列表 */
 export const ACT_KEY = 'acts'
 
+/** 同步开关（是否将编辑数据同步到页面） */
+export const SYNC_ENABLED_KEY = 'syncEnabled'
+
 /** 时间格式 */
 export const DATE_FORMAT = 'YYYY-MM-DD'
