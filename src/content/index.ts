@@ -343,12 +343,12 @@ function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
 
   // 单次成效费用更新
   if (patch.cost_per_result && typeof patch.cost_per_result === 'object' && 'value' in patch.cost_per_result) {
-    patchByCellSuffix(element, 'table_cell:forAttributionWindow(cost_per_result,default)', formatCurrency(patch.cost_per_result.value, true, true))
+    patchByCellSuffix(element, 'table_cell:forAttributionWindow(cost_per_result,default)', formatCurrency(patch.cost_per_result.value))
   }
 
   // 已花费金额更新
   if (typeof patch.amount_spent === 'number') {
-    patchByCellSuffix(element, 'table_cell:spend', formatCurrency(patch.amount_spent))
+    patchByCellSuffix(element, 'table_cell:spend', formatCurrency(patch.amount_spent, true, true))
   }
 
   // 展示次数更新
