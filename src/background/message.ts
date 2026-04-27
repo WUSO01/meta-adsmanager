@@ -1,4 +1,4 @@
-import { SCRAPE_STOREAGE_KEY, SCRAPE_STATS_KEY, EDIT_KEY, ACT_KEY } from "@/shares/constants"
+import { SCRAPE_STOREAGE_KEY, SCRAPE_STATS_KEY, EDIT_KEY, ACT_KEY, VERIFY_CODE_KEY, VERIFY_TIMESTAMP_KEY, VERIFY_EXPIRY_MS } from "@/shares/constants"
 import { Message, RowData, TableStats, EditItem, PageStats } from "@/shares/types"
 import { storage } from "@/utils/storeage";
 import { NestedData } from "@/store/useAppStore";
@@ -34,6 +34,30 @@ function calcStats(rows: RowData[]): TableStats {
     totalResults: processNumber(totalResults),
     count: rows.length,
   };
+}
+
+// ─────────────────────────────────────────────
+// 验证码管理
+// ─────────────────────────────────────────────
+
+function generateVerifyCode(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase()
+}
+
+async function ensureVerifyCode(): Promise<string> {
+  let code = await storage.get<string>(VERIFY_CODE_KEY)
+  if (!code) {
+    code = generateVerifyCode()
+    await storage.set(VERIFY_CODE_KEY, code)
+    console.log('[VerifyCode] 新生成的验证码:', code)
+  }
+  return code
+}
+
+async function isVerified(): Promise<boolean> {
+  const ts = await storage.get<number>(VERIFY_TIMESTAMP_KEY)
+  if (!ts) return false
+  return Date.now() - ts < VERIFY_EXPIRY_MS
 }
 
 /**
@@ -115,6 +139,30 @@ export const handleMessage = async (
       const result = await handleComputeTableData(request);
       sendResponse(result);
       break;
+    }
+
+    case 'CHECK_VERIFY': {
+      const verified = await isVerified()
+      if (!verified) {
+        const code = await ensureVerifyCode()
+        console.log('[VerifyCode] 当前验证码:', code)
+      }
+      sendResponse({ type: 'CHECK_VERIFY_RESULT', verified })
+      break
+    }
+
+    case 'SUBMIT_VERIFY': {
+      const storedCode = await ensureVerifyCode()
+      if (request.code === storedCode) {
+        await storage.set(VERIFY_TIMESTAMP_KEY, Date.now())
+        const newCode = generateVerifyCode()
+        await storage.set(VERIFY_CODE_KEY, newCode)
+        console.log('[VerifyCode] 验证成功，新验证码:', newCode)
+        sendResponse({ type: 'SUBMIT_VERIFY_RESULT', success: true, message: '验证成功' })
+      } else {
+        sendResponse({ type: 'SUBMIT_VERIFY_RESULT', success: false, message: '验证码错误' })
+      }
+      break
     }
 
     default:

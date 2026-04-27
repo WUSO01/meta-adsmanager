@@ -64,6 +64,10 @@ export type Message =
   | { type: 'SCRAPING_STORED' }
   | { type: 'COMPUTE_TABLE_DATA'; level: Level; range?: DateRange; act?: string }
   | { type: 'COMPUTE_TABLE_DATA_RESULT'; tableData: RowData[]; stats: TableStats; missingDates: string[]; noData: boolean }
+  | { type: 'CHECK_VERIFY'; }
+  | { type: 'CHECK_VERIFY_RESULT'; verified: boolean }
+  | { type: 'SUBMIT_VERIFY'; code: string }
+  | { type: 'SUBMIT_VERIFY_RESULT'; success: boolean; message: string }
 // | { type: 'SYNC_TO_PAGE' }
 
 export interface TableStats {

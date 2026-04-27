@@ -1,7 +1,7 @@
 import { Level } from '@/shares/types'
 import { useAppStore } from '@/store/useAppStore'
-import { Button, message, Popconfirm, Spin, Switch } from 'antd'
-import { useMemo, useState } from 'react'
+import { Button, Input, message, Popconfirm, Spin, Switch } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { getLevelDataFromRows } from '@/utils'
 
 export default function App() {
@@ -11,6 +11,40 @@ export default function App() {
   const syncEnabled = useAppStore(s => s.syncEnabled)
   const setSyncEnabled = useAppStore(s => s.setSyncEnabled)
   const [spinning, setSpinning] = useState(false)
+
+  const [verified, setVerified] = useState<boolean | null>(null)
+  const [codeInput, setCodeInput] = useState('')
+  const [verifyLoading, setVerifyLoading] = useState(false)
+
+  useEffect(() => {
+    chrome.runtime.sendMessage({ type: 'CHECK_VERIFY' }, (res) => {
+      if (res?.type === 'CHECK_VERIFY_RESULT') {
+        setVerified(res.verified)
+      }
+    })
+  }, [])
+
+  const handleVerify = () => {
+    if (!codeInput.trim()) {
+      message.warning('请输入验证码')
+      return
+    }
+    setVerifyLoading(true)
+    chrome.runtime.sendMessage(
+      { type: 'SUBMIT_VERIFY', code: codeInput.trim().toUpperCase() },
+      (res) => {
+        setVerifyLoading(false)
+        if (res?.type === 'SUBMIT_VERIFY_RESULT') {
+          if (res.success) {
+            message.success(res.message)
+            setVerified(true)
+          } else {
+            message.error(res.message)
+          }
+        }
+      }
+    )
+  }
 
   const buttons = [
     { level: 'campaigns', label: '抓取广告系列' },
@@ -23,7 +57,6 @@ export default function App() {
    */
   const handleScrape = async (level: Level) => {
     try {
-      // 获取当前活动标签页
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       if (!tab || !tab.url || !tab.id) {
@@ -38,13 +71,10 @@ export default function App() {
         return
       }
 
-      // 设置 loading 状态
       setSpinning(true)
 
-      // 获取当前账户
       const act = searchParams.get('act') || ''
 
-      // 从 tab URL 中读取 date 参数，取第一段作为时间 key
       const dateParam = searchParams.get('date')
       let time: string = 'all'
 
@@ -91,7 +121,7 @@ export default function App() {
   // 优先级：编辑过 > 抓取过
   const timeStats = useMemo(() => {
     return Object.entries(data)
-      .sort(([a], [b]) => b.localeCompare(a)) // 时间倒序
+      .sort(([a], [b]) => b.localeCompare(a))
       .map(([timeKey, dateMap]) => {
         const hasEdits = !!(edits[timeKey] && Object.keys(edits[timeKey]).length > 0)
         const hasData = Object.keys(dateMap).length > 0
@@ -106,6 +136,53 @@ export default function App() {
         }
       })
   }, [data, edits])
+
+  if (verified === null) {
+    return (
+      <div className="flex items-center justify-center w-[380px] h-[200px]">
+        <Spin />
+      </div>
+    )
+  }
+
+  if (!verified) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 w-[380px]">
+        <div className="min-h-screen bg-white shadow-lg ring-1 ring-slate-200">
+          <div className="px-5 pb-4 pt-5">
+            <h1 className="text-2xl font-bold text-slate-900">Facebook 广告管理</h1>
+            <p className="mt-1 text-sm text-slate-500">请输入验证码以继续使用</p>
+
+            <div className="mt-8 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <p className="text-sm text-slate-500">验证码有效期为 15 天</p>
+              <Input
+                placeholder="请输入验证码"
+                value={codeInput}
+                onChange={e => setCodeInput(e.target.value)}
+                onPressEnter={handleVerify}
+                className="!w-60 text-center !text-lg tracking-widest"
+                maxLength={6}
+                autoFocus
+              />
+              <Button
+                type="primary"
+                loading={verifyLoading}
+                onClick={handleVerify}
+                className="w-60"
+              >
+                验证
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Spin spinning={spinning}>
