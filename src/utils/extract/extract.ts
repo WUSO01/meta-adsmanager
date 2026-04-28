@@ -82,7 +82,6 @@ export default class Extract {
         // 广告的名称需要重新抓取
         const nameCell = this.getCell('table_cell:forObjectType(name,ADGROUP)/maiba:ad_object_overflow_menu_entrypoint')?.previousSibling
         const name = nameCell?.textContent?.trim() || ''
-        console.log('nameCell', nameCell, name)
 
         datas.push({
           ...commonData,
