@@ -16,6 +16,7 @@ import {
   budgetColumn,
 } from './tableColumns';
 import { TableFooterStats } from './TableFooterStats';
+import { EditItem } from './EditItem';
 
 const columns: TableProps<RowData>['columns'] = [
   statusColumn(),
@@ -24,6 +25,9 @@ const columns: TableProps<RowData>['columns'] = [
     dataIndex: 'name',
     title: '广告',
     fixed: 'left',
+    render: (_, record) => (
+      <EditItem data={record} field="name" type='string' />
+    )
   },
   deliveryColumn(),
   recommendationsColumn(),
@@ -39,6 +43,7 @@ const columns: TableProps<RowData>['columns'] = [
 
 export const AdsTable = () => {
   const { tableData, noData, stats, missingDates } = useTableData<RowData>('ads');
+  console.log('tableData', tableData)
 
   return (
     <div>

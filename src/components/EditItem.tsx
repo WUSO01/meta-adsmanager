@@ -2,12 +2,13 @@ import { RowData } from "@/shares/types"
 import { useAppStore } from "@/store/useAppStore"
 import { EditOutlined } from "@ant-design/icons"
 import { processNumber } from "@/utils"
-import { Form, InputNumber, message, Modal } from "antd"
+import { Form, Input, InputNumber, message, Modal } from "antd"
 import { useMemo, useState } from "react"
 import _ from 'lodash'
 
 interface EditItemProps {
   data: RowData
+  type?: 'number' | 'string'
   /** 需要更新的字段 */
   field: keyof typeof relationMap
   formatter?: (value: string | number | undefined) => string
@@ -24,6 +25,10 @@ type UpdateField = {
 }
 
 const relationMap = {
+  name: {
+    label: '名称',
+    path: 'name'
+  },
   /**
    * 更改成效 → 更新单次成效费用
    * 单次成效费用 = 已花费金额 / 成效
@@ -150,10 +155,10 @@ function applyToPatch(
   patch: Partial<RowData>,
   data: RowData,
   field: keyof RowData,
-  newValue: number
+  newValue: number | string
 ) {
   const originItem = data[field]
-  if (typeof originItem === 'number') {
+  if (typeof originItem === 'number' || typeof originItem === 'string') {
     patch[field] = newValue as any
   } else {
     patch[field] = {
@@ -168,7 +173,7 @@ function applyToPatch(
  * 目前仅支持数据编辑，并且支持编辑的就那么几项
  */
 export const EditItem = (props: EditItemProps) => {
-  const { data, field, formatter, parser } = props
+  const { data, field, type = 'number', formatter, parser } = props
   const { path } = relationMap[field]
 
   const [form] = Form.useForm()
@@ -180,9 +185,10 @@ export const EditItem = (props: EditItemProps) => {
   const [open, setOpen] = useState(false)
 
   const defaultValue = useMemo(() => {
-    const value = _.get(data, path) || 0
+    const val = type === 'number' ? 0 : ''
+    const value = _.get(data, path) || val
     return value
-  }, [data, field])
+  }, [data, field, type])
 
   /** 判断当前字段在当前日期范围内是否被编辑过 */
   const isEdited = useMemo(() => {
@@ -283,11 +289,18 @@ export const EditItem = (props: EditItemProps) => {
             label={relationMap[field]?.label}
             tooltip={(relationMap[field] as any)?.tooltip}
           >
-            <InputNumber
-              style={{ width: '100%' }}
-              formatter={formatter}
-              parser={parser}
-            />
+            {
+              type === 'number'
+                ? (
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    formatter={formatter}
+                    parser={parser}
+                  />)
+                : (
+                  <Input />
+                )
+            }
           </Form.Item>
         </Form>
       </Modal>

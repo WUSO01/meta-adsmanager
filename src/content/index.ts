@@ -336,6 +336,21 @@ function patchByCellSuffix(element: Element, suffix: string, value: unknown) {
 }
 
 function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
+
+  const { pathname } = new URL(window.location.href)
+  // 名称更新
+  if (patch.name && typeof patch.name === 'string') {
+    if (pathname.endsWith('/campaigns')) {
+      patchByCellSuffix(element, 'table_cell:forObjectType(name,CAMPAIGN_GROUP)', patch.name)
+    } else if (pathname.endsWith('/adsets')) {
+      patchByCellSuffix(element, 'table_cell:forObjectType(name,CAMPAIGN)', patch.name)
+    } else {
+      const cell = element.querySelector('span[data-surface$="table_cell:forObjectType(name,ADGROUP)/maiba:ad_object_overflow_menu_entrypoint"]')
+      if (cell?.previousSibling) {
+        cell.previousSibling.textContent = patch.name
+      }
+    }
+  }
   // 成效更新
   if (patch.results && typeof patch.results === 'object' && 'value' in patch.results) {
     patchByCellSuffix(element, 'table_cell:forAttributionWindow(results,default)', formatCurrency(patch.results.value, false))
