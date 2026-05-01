@@ -33,8 +33,13 @@ export const formatCurrency = (value?: number | string, dollar = true, isMoney =
   return result
 };
 
+/**
+ * 四舍五入到两位小数
+ * @param num - 输入数字
+ * @returns 四舍五入后的数字
+ */
 export const processNumber = (num: number) => {
-  return parseFloat(num.toFixed(2));
+  return Math.round(num * 100) / 100;
 }
 
 /**
