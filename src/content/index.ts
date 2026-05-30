@@ -338,17 +338,26 @@ function patchByCellSuffix(element: Element, suffix: string, value: unknown) {
 function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
 
   const { pathname } = new URL(window.location.href)
+
+  let iderify = ''
+
+  if (pathname.endsWith('/campaigns')) {
+    iderify = 'CAMPAIGN_GROUP'
+  } else if (pathname.endsWith('/adsets')) {
+    iderify = 'CAMPAIGN'
+  } else {
+    iderify = 'ADGROUP'
+  }
+
   // 名称更新
   if (patch.name && typeof patch.name === 'string') {
-    if (pathname.endsWith('/campaigns')) {
-      patchByCellSuffix(element, 'table_cell:forObjectType(name,CAMPAIGN_GROUP)', patch.name)
-    } else if (pathname.endsWith('/adsets')) {
-      patchByCellSuffix(element, 'table_cell:forObjectType(name,CAMPAIGN)', patch.name)
-    } else {
+    if (iderify === 'ADGROUP') {
       const cell = element.querySelector('span[data-surface$="table_cell:forObjectType(name,ADGROUP)/maiba:ad_object_overflow_menu_entrypoint"]')
       if (cell?.previousSibling) {
         cell.previousSibling.textContent = patch.name
       }
+    } else {
+      patchByCellSuffix(element, `table_cell:forObjectType(name,${iderify})`, patch.name)
     }
   }
   // 成效更新
@@ -388,8 +397,7 @@ function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
 
   // 预算更新
   if (patch.budget && typeof patch.budget === 'object' && 'value' in patch.budget) {
-    // 只有广告系列的预算可以编辑
-    patchByCellSuffix(element, 'table_cell:forObjectType(budget,CAMPAIGN_GROUP)', formatCurrency(patch.budget.value))
+    patchByCellSuffix(element, `table_cell:forObjectType(budget,${iderify})`, formatCurrency(patch.budget.value))
   }
 }
 

@@ -25,16 +25,7 @@ export default class Extract {
       this.element = element
       const commonData = this.getCommonData('campaigns')
       if (commonData) {
-        // 预算
-        const budgetCell = this.extractCompoundValue(this.getCell('table_cell:forObjectType(budget,CAMPAIGN_GROUP)'))
-        const budget = {
-          value: parseCurrency(budgetCell.main),
-          type: budgetCell.sub
-        }
-        datas.push({
-          ...commonData,
-          budget
-        } as RowData)
+        datas.push(commonData as RowData)
       }
     })
 
@@ -146,7 +137,7 @@ export default class Extract {
     } else {
       // 过滤掉旁边悬浮的编辑/对比图标，直接抓取 a 标签内的文本
       const nameLink = nameCell.querySelector('a');
-      obj.name =  nameLink ? nameLink.textContent.trim() : '';
+      obj.name = nameLink ? nameLink.textContent.trim() : '';
     }
 
     // 投放状态
@@ -164,9 +155,20 @@ export default class Extract {
       type: resultsData.sub
     }
 
-    // 预算
-    const budgetCell = this.getCell(`table_cell:forObjectType(budget,${this.iderify})`)
-    obj.budget = budgetCell ? budgetCell.textContent.trim() : ''
+    // 预算会存在两种情况：
+    // 1. 数值 + 状态（例如：$100/n单日），这种情况需要特殊处理
+    // 2. 纯文本（例如：使用广告组预算），这种情况需要直接抓取文本内容
+    // 先尝试按照第一种情况抓取
+    const budgetCell = this.extractCompoundValue(this.getCell(`table_cell:forObjectType(budget,${this.iderify})`))
+    if (budgetCell.sub === '') {
+      const budgetCell = this.getCell(`table_cell:forObjectType(budget,${this.iderify})`)
+      obj.budget = budgetCell ? budgetCell.textContent.trim() : ''
+    } else {
+      obj.budget = {
+        value: parseCurrency(budgetCell.main),
+        type: budgetCell.sub
+      }
+    }
 
     // 单次成效费用
     const cprData = this.extractCompoundValue(this.getCell('table_cell:forAttributionWindow(cost_per_result,default)'));
