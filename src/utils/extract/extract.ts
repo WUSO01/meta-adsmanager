@@ -155,18 +155,25 @@ export default class Extract {
       type: resultsData.sub
     }
 
-    // 预算会存在两种情况：
+    // 预算会存在三种情况：
     // 1. 数值 + 状态（例如：$100/n单日），这种情况需要特殊处理
     // 2. 纯文本（例如：使用广告组预算），这种情况需要直接抓取文本内容
+    // 3. 纯文本 + 状态（例如：使用广告组预算/n不共享），这种情况需要直接抓取文本内容
     // 先尝试按照第一种情况抓取
     const budgetCell = this.extractCompoundValue(this.getCell(`table_cell:forObjectType(budget,${this.iderify})`))
     if (budgetCell.sub === '') {
       const budgetCell = this.getCell(`table_cell:forObjectType(budget,${this.iderify})`)
       obj.budget = budgetCell ? budgetCell.textContent.trim() : ''
     } else {
-      obj.budget = {
-        value: parseCurrency(budgetCell.main),
-        type: budgetCell.sub
+      // 判断main部分是否包含数值，如果不包含数值，则按照第二种或第三种情况处理
+      const hasNumericValue = /\d/.test(budgetCell.main);
+      if (hasNumericValue) {
+        obj.budget = {
+          value: parseCurrency(budgetCell.main),
+          type: budgetCell.sub
+        }
+      } else {
+        obj.budget = budgetCell.main
       }
     }
 
