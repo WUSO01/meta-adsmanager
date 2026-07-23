@@ -2,14 +2,16 @@ import { EDIT_KEY, SCRAPE_STATS_KEY, SCRAPE_STOREAGE_KEY, SYNC_ENABLED_KEY } fro
 import type { DateRange, EditItem, Level, Message, PageStats, RowData } from "@/shares/types";
 import type { NestedData } from "@/store/useAppStore";
 import Extract from "@/utils/extract/extract";
-import { getMissingDates, hasDataForRange, mergeEdits } from "@/utils/merge";
+import { getCellValueText, patchByCellSuffix } from "@/utils/domPatch";
+import { collectPairedRows } from "@/utils/footerStats";
+import { hasDataForRange, mergeEdits } from "@/utils/merge";
 import dayjs from "dayjs";
 import { formatCurrency, parseCurrency, processNumber, removeAfterComma, sleep } from "../utils";
 
 let latestEditsCache: EditItem = {}
 let observer: MutationObserver | null = null
 let rafId: number | null = null
-let partialRangeBaseStatsCache: Record<string, PageStats> = {}
+let pageBaseStatsCache: Record<string, PageStats> = {}
 let syncEnabled = true
 
 
@@ -19,11 +21,8 @@ let syncEnabled = true
 function extractPageStats(): PageStats {
   const footer = document.querySelector('[data-pagelet="FixedDataTableNew_footerRow"]');
 
-  const readCell = (surfaceSuffix: string): string => {
-    const cell = footer?.querySelector(`span[data-surface$="${surfaceSuffix}"]`);
-    const el = cell?.querySelector('[geotextcolor="value"], span[data-interactable] ,._3dfi') as HTMLElement | null;
-    return el?.textContent?.trim() ?? '';
-  };
+  const readCell = (surfaceSuffix: string) =>
+    footer ? getCellValueText(footer, surfaceSuffix) : ''
 
   const amountSpentText = readCell('table_cell:spend');
   const impressionsText = readCell('table_cell:impressions');
@@ -44,31 +43,25 @@ function extractPageStats(): PageStats {
 function resolveBasePageStats(
   storedStats: PageStats | undefined,
   hasScrapedDataForCurrentRange: boolean,
-  partialRangeBaseKey?: string
+  pageContextKey: string
 ) {
-  const livePageStats = extractPageStats()
+  if (pageBaseStatsCache[pageContextKey]) {
+    return pageBaseStatsCache[pageContextKey]
+  }
 
-  // 当前范围没有抓取数据：直接使用页面原始统计
-  if (!hasScrapedDataForCurrentRange) {
+  const footer = document.querySelector('[data-pagelet="FixedDataTableNew_footerRow"]')
+  if (footer) {
+    const livePageStats = extractPageStats()
+    pageBaseStatsCache[pageContextKey] = livePageStats
     return livePageStats
   }
 
-  // 多日范围存在未抓取日期：基准应取页面完整统计（含未抓取日期），
-  // 但要固定为首次读取值，避免 observer 重复触发导致累计叠加。
-  if (partialRangeBaseKey) {
-    if (!partialRangeBaseStatsCache[partialRangeBaseKey]) {
-      partialRangeBaseStatsCache[partialRangeBaseKey] = livePageStats
-    }
-    return partialRangeBaseStatsCache[partialRangeBaseKey]
+  // footer 尚未渲染时不缓存历史值，后续 DOM 就绪后仍会以页面实时值为基准。
+  if (!hasScrapedDataForCurrentRange) {
+    return null
   }
 
-  // 当前范围已抓取完整：必须以抓取时快照为基准（即使是 0）
-  if (storedStats) {
-    return storedStats
-  }
-
-  // 当前范围已抓取但没有对应统计快照时，不回写 footer，避免重复累加
-  return null
+  return storedStats || null
 }
 
 
@@ -78,6 +71,11 @@ function resolveBasePageStats(
 function getStoredStatsKey(range: DateRange | undefined, act?: string, level?: Level) {
   const timeKey = !range ? 'all' : range.start === range.end ? range.start : 'all'
   return `${timeKey}__${act || ''}__${level || ''}`
+}
+
+function getPageContextKey(range: DateRange | undefined, act?: string, level?: Level) {
+  const rangeKey = range ? `${range.start}__${range.end}` : 'all'
+  return `${rangeKey}__${act || ''}__${level || ''}`
 }
 
 function getCurrentActFromUrl() {
@@ -167,31 +165,21 @@ function applyStatsToPage(basePageStats: PageStats, scrapedRows: RowData[], edit
   const finalClicks = basePageStats.totalClicks + diffClicks;
 
 
-  const patchFooterCell = (surfaceSuffix: string, text: string) => {
-    const cell = footer.querySelector(`span[data-surface$="${surfaceSuffix}"]`);
-
-    if (!cell) return;
-    // 优先找带 geotextcolor 的主值元素，其次找 _3dfi（货币格式），最后找 data-interactable
-    const el = (
-      cell.querySelector('[geotextcolor="value"]') ??
-      cell.querySelector('.x1rg5ohu') ??
-      cell.querySelector('span[data-interactable]')
-    ) as HTMLElement | null;
-    if (el) el.textContent = text;
-  };
-
   // 单次成效费用
   const cost_per_result = formatCurrency(finalAmountSpent / finalResults)
   // 单次注册费用
   const per_complete_registration = formatCurrency(finalAmountSpent / finalCompleteReg)
+
+  const patchFooterCell = (surfaceSuffix: string, text: string) =>
+    patchByCellSuffix(footer, surfaceSuffix, text, { decorate: false })
 
   patchFooterCell('table_cell:spend', formatCurrency(finalAmountSpent));
   patchFooterCell('table_cell:impressions', formatCurrency(finalImpressions, false));
   patchFooterCell('table_cell:forAttributionWindow(results,default)', formatCurrency(finalResults, false));
   patchFooterCell('table_cell:forAttributionWindow(actions:omni_complete_registration,default)', formatCurrency(finalCompleteReg, false));
   patchFooterCell('table_cell:clicks', formatCurrency(finalClicks, false));
-  patchFooterCell('forAttributionWindow(cost_per_result,default)', cost_per_result)
-  patchFooterCell('forAttributionWindow(cost_per_action_type:omni_complete_registration,default)', per_complete_registration)
+  patchFooterCell('table_cell:forAttributionWindow(cost_per_result,default)', cost_per_result)
+  patchFooterCell('table_cell:forAttributionWindow(cost_per_action_type:omni_complete_registration,default)', per_complete_registration)
 }
 
 /**
@@ -293,46 +281,10 @@ function getPageDateRange(): DateRange | undefined {
   return { start, end }
 }
 
-function toText(value: unknown) {
-  if (value === null || value === undefined) return ''
-  return String(value)
-}
-
 function getRowIdBySurface(element: Element | null) {
   const rowSurface = element?.getAttribute('data-surface')
   const idMatch = rowSurface?.match(/table_row:(\d+)unit/)
   return idMatch?.[1]
-}
-
-function patchByCellSuffix(element: Element, suffix: string, value: unknown) {
-  const cell = element.querySelector(`span[data-surface$="${suffix}"]`)
-  if (!cell) return
-
-  const suffixs = [
-    'table_cell:forAttributionWindow(results,default)',
-    'table_cell:forAttributionWindow(cost_per_result,default)',
-    'table_cell:forAttributionWindow(cost_per_action_type:omni_complete_registration,default)',
-    'table_cell:forAttributionWindow(actions:omni_complete_registration,default)',
-  ]
-
-  const mainEl = cell.querySelector('[geotextcolor="value"]') as HTMLElement | null
-  if (mainEl) {
-    if (suffixs.some(item => item === suffix)) {
-      if (value === '—') {
-        mainEl.style.textDecoration = 'none'
-      } else {
-        mainEl.style.textDecoration = 'underline dotted'
-      }
-    }
-    mainEl.textContent = toText(value)
-    return
-  }
-
-  const linkEl = cell.querySelector('a') as HTMLElement | null
-  if (linkEl) {
-    linkEl.textContent = toText(value)
-    return
-  }
 }
 
 function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
@@ -399,6 +351,33 @@ function applyPatchToRowElement(element: Element, patch: Partial<RowData>) {
   if (patch.budget && typeof patch.budget === 'object' && 'value' in patch.budget) {
     patchByCellSuffix(element, `table_cell:forObjectType(budget,${iderify})`, formatCurrency(patch.budget.value))
   }
+}
+
+/**
+ * 回写当前虚拟列表已渲染的行，并收集可用于 footer 差量计算的成对数据。
+ *
+ * footer 只比较同时存在原始值和编辑值的行；缺失原始抓取数据的编辑行
+ * 仍可回显，但不能把整行指标当成新增量。Map 同时避免重复 DOM 行多算。
+ */
+function applyVisibleRows(
+  rowWrappers: Element[],
+  editedData: Map<string, RowData>,
+  scrapedData: Record<string, RowData>
+) {
+  const visibleIds: string[] = []
+
+  rowWrappers.forEach((element) => {
+    const id = getRowIdBySurface(element)
+    if (!id) return
+
+    const editedRow = editedData.get(id)
+    if (!editedRow) return
+
+    applyPatchToRowElement(element, editedRow)
+    visibleIds.push(id)
+  })
+
+  return collectPairedRows(visibleIds, editedData, scrapedData)
 }
 
 function waitForRowsAndApply(retries = 20, interval = 300) {
@@ -482,13 +461,6 @@ async function applyTodayFromCache() {
     const allData: NestedData = rawData[SCRAPE_STOREAGE_KEY] || {}
     const allPageStats: Record<string, PageStats> = rawData[SCRAPE_STATS_KEY] || {}
     const hasScrapedDataForCurrentRange = hasDataForRange(allData, range)
-    const missingDates = getMissingDates(allData, range)
-    const hasMissingDates = missingDates.length > 0
-
-    // 非“多日且有缺失”场景，清理部分范围基准缓存，避免串用
-    if (!range || range.start === range.end || !hasMissingDates) {
-      partialRangeBaseStatsCache = {}
-    }
 
     // 多日范围
     if (range && range.start !== range.end) {
@@ -507,28 +479,18 @@ async function applyTodayFromCache() {
 
       const extract = new Extract()
       const rowWrappers = Array.from(extract.rowWrappers)
-      const scrapedRows: RowData[] = []
-      const editedRows: RowData[] = []
 
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const partialRangeBaseKey = hasMissingDates ? `${range.start}__${range.end}__${act}__${currentLevel}` : undefined
-      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange, partialRangeBaseKey)
-      if (!basePageStats) return
+      const pageContextKey = getPageContextKey(range, act, currentLevel)
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange, pageContextKey)
 
-      rowWrappers.forEach((element) => {
-        const id = getRowIdBySurface(element)
-        if (!id) return
-        const editedRow = dataMap.get(id)
-        if (!editedRow) return
-        applyPatchToRowElement(element, editedRow)
-        editedRows.push(editedRow)
-        const scrapedRow = scrapedMerged[id]
-        if (scrapedRow) scrapedRows.push(scrapedRow)
-      })
+      const { scrapedRows, editedRows } = applyVisibleRows(rowWrappers, dataMap, scrapedMerged)
 
-      applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      if (basePageStats) {
+        applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      }
 
     } else if (range) {
       // 单日
@@ -540,27 +502,18 @@ async function applyTodayFromCache() {
 
       const extract = new Extract()
       const rowWrappers = Array.from(extract.rowWrappers)
-      const scrapedRows: RowData[] = []
-      const editedRows: RowData[] = []
 
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
-      if (!basePageStats) return
+      const pageContextKey = getPageContextKey(range, act, currentLevel)
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange, pageContextKey)
 
-      rowWrappers.forEach((element) => {
-        const id = getRowIdBySurface(element)
-        if (!id) return
-        const editedRow = dataMap.get(id)
-        if (!editedRow) return
-        applyPatchToRowElement(element, editedRow)
-        editedRows.push(editedRow)
-        const scrapedRow = scrapedMerged[id]
-        if (scrapedRow) scrapedRows.push(scrapedRow)
-      })
+      const { scrapedRows, editedRows } = applyVisibleRows(rowWrappers, dataMap, scrapedMerged)
 
-      applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      if (basePageStats) {
+        applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      }
 
     } else {
       // all
@@ -572,27 +525,18 @@ async function applyTodayFromCache() {
 
       const extract = new Extract()
       const rowWrappers = Array.from(extract.rowWrappers)
-      const scrapedRows: RowData[] = []
-      const editedRows: RowData[] = []
 
       const act = getCurrentActFromUrl() || Object.values(editedMerged)[0]?.act || ''
       const currentLevel = getCurrentLevelFromUrl() || 'campaigns'
       const storedStatsKey = getStoredStatsKey(range, act, currentLevel)
-      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange)
-      if (!basePageStats) return
+      const pageContextKey = getPageContextKey(range, act, currentLevel)
+      const basePageStats = resolveBasePageStats(allPageStats[storedStatsKey], hasScrapedDataForCurrentRange, pageContextKey)
 
-      rowWrappers.forEach((element) => {
-        const id = getRowIdBySurface(element)
-        if (!id) return
-        const editedRow = dataMap.get(id)
-        if (!editedRow) return
-        applyPatchToRowElement(element, editedRow)
-        editedRows.push(editedRow)
-        const scrapedRow = scrapedMerged[id]
-        if (scrapedRow) scrapedRows.push(scrapedRow)
-      })
+      const { scrapedRows, editedRows } = applyVisibleRows(rowWrappers, dataMap, scrapedMerged)
 
-      applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      if (basePageStats) {
+        applyStatsToPage(basePageStats, scrapedRows, editedRows)
+      }
     }
   } finally {
     if (observer) {
@@ -675,4 +619,4 @@ chrome.runtime.onMessage.addListener((request: Message, _, sendResponse) => {
   }
 
   return true; // 保持消息通道开启
-}); 
+});
