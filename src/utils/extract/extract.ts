@@ -93,14 +93,30 @@ export default class Extract {
    */
   extractCompoundValue(cellElement: Element | null) {
     if (!cellElement) return { main: "", sub: "" };
-    // 主文本通常在带有 geotextcolor="value" 的 div 中
+
+    const normalizeText = (value?: string | null) =>
+      value?.replace(/\s+/g, ' ').trim() || ''
+
+    // 旧版 DOM 的主文本通常在带有 geotextcolor="value" 的元素中
     const mainEl = cellElement.querySelector('[geotextcolor="value"]');
     // 副文本通常带有特定的截断 class: ellipsis _1ha4
     const subEl = cellElement.querySelector('.ellipsis._1ha4');
 
+    let main = normalizeText(mainEl?.textContent)
+
+    // 新版 DOM 已移除 geotextcolor="value"。从单元格副本中排除副文本和
+    // 视觉占位节点后读取剩余文本，避免依赖 Meta 经常变化的动态 class。
+    if (!main) {
+      const mainContent = cellElement.cloneNode(true) as Element
+      mainContent
+        .querySelectorAll('.ellipsis._1ha4, [data-visualcompletion="ignore"]')
+        .forEach(element => element.remove())
+      main = normalizeText(mainContent.textContent)
+    }
+
     return {
-      main: mainEl ? mainEl.textContent.trim() : "",
-      sub: subEl ? subEl.textContent.trim() : ""
+      main,
+      sub: normalizeText(subEl?.textContent)
     };
   };
 
