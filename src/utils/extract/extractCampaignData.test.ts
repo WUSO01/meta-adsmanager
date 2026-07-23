@@ -395,7 +395,7 @@ describe("extractCampaignData", () => {
     expect(row.recommendations).toBe("—");
     expect(row.results).toEqual({ value: 165, type: "网站购物" });
     expect(row.cost_per_result).toEqual({ value: 10.21, type: "单次购物" });
-    expect(row.budget).toEqual({ value: "$1,025.00", type: "单日" });
+    expect(row.budget).toEqual({ value: 1025, type: "单日" });
     expect(row.amount_spent).toBe(1684.51);
     expect(row.impressions).toBe(93665);
   });
